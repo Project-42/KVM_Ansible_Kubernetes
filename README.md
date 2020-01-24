@@ -28,3 +28,68 @@ For now (until get some time to split the playbooks) the exeuction is as simple 
 or the folliwng to delete it:
 
 `ansible-playbook Delete-all.yml`
+
+## Configuration and changes before you start ##
+
+-- ansible.cfg file
+For the default configuration, I have disable host_key_checking.
+The remote user has been set to root just in case your kvm_host_user is different
+```[defaults]
+# host_key_check diabled to avoid issues connecting to the VMs created *Is a security risk*
+host_key_checking = False
+
+# Make user we are using local inventory and not the default one
+inventory=./inventory
+
+# Set default user to root
+remote_user=root
+```
+
+-- kubernetes_variables_vms.yml file
+This is the main configuration file.
+Here, you will need to set all parameters for the playbook to work
+
+```---
+kvm_host_user: solifugo
+
+bridge_name: kuberbr42
+gateway_ip: 10.10.1.1
+netmask: 255.255.255.0
+dhcp_range_start: 10.10.1.10
+dhcp_range_end: 10.10.1.15
+network_name: "Kubernetes"
+
+kube_network: flannel
+
+network_model: "virtio"
+vm_location: "/home/kvm/HDD/Kubernetes"
+root_pass: "Welcome1"
+
+
+guests:
+  kmaster:
+    name: kmaster
+    mem: 4096
+    cpus: 4
+    os_type: centos-7.0
+    file_type: qcow2
+    mac: '52:54:00:6c:20:00'
+    ip: 10.10.1.10
+  knode1:
+    name: knode1
+    mem: 2048
+    cpus: 4
+    os_type: centos-7.0
+    file_type: qcow2
+    mac: '52:54:00:6c:20:01'
+    ip: 10.10.1.11
+  knode2:
+    name: knode2
+    mem: 2048
+    cpus: 4
+    os_type: centos-7.0
+    file_type: qcow2
+    mac: '52:54:00:6c:20:02'
+    ip: 10.10.1.12
+```
+
