@@ -31,7 +31,7 @@ or the folliwng to delete it:
 
 ## Configuration and changes before you start ##
 
-- ansible.cfg
+- *ansible.cfg*
 
 For the default configuration, I have disable host_key_checking.
 The remote user has been set to root just in case your kvm_host_user is different
@@ -46,7 +46,7 @@ inventory=./inventory
 remote_user=root
 ```
 
-- kubernetes_variables_vms.yml
+- *kubernetes_variables_vms.yml*
 
 This is the main configuration file.
 Here, you will need to set all parameters for the playbook to work
@@ -95,3 +95,7 @@ guests:
     ip: 10.10.1.12
 ```
 
+- */etc/hosts*
+
+In order to get the playbook working, is necessary to add the VMs hostname and IPs to you kvm_host hosts file
+Will try to fix that in future revisions
