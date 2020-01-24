@@ -1,4 +1,5 @@
 ---
+kvm_host_user: solifugo
 
 bridge_name: kuberbr42
 gateway_ip: 10.10.1.1
