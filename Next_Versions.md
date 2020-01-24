@@ -3,8 +3,6 @@
 
 
 ## Fix master latest restart ##
-
-
 For some reason, the master wont show as ready unless is rebooted after cluster is created.
 Need to avoid that or at least, understand why is happening
 
@@ -14,6 +12,10 @@ Playbook is too large, so will try to divide different phases and use playbook i
 ## VMs Update process ##
 Change the way VMs are updated. Currently the VMs are created and them updated, that means we wait for all VMs to get updated.
 Need to work in a system where a VM seed is created, updated and then cloned to create the VMs requested
+
+## Make password encrypted ##
+Use Ansible Vault for the passwords
+
 
 ## Simplify the Variables Files ##
 There should be not need to set so many different variables.
