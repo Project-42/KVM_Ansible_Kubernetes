@@ -31,9 +31,3 @@ Add a Variable in the variables file to create system with flannel or calico
 VMs creation/delete is using commands instead of virt module
 Same with other parts of the playbook
 (https://docs.ansible.com/ansible/latest/modules/virt_module.html?highlight=virt)
--- defining and launching an LXC guest
-- name: define vm
-  virt:
-    command: define
-    xml: "{{ lookup('template', 'container-template.xml.j2') }}"
-    uri: 'lxc:///'
