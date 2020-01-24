@@ -33,3 +33,7 @@ Add a Variable in the variables file to create system with flannel or calico
 VMs creation/delete is using commands instead of virt module
 Same with other parts of the playbook
 (https://docs.ansible.com/ansible/latest/modules/virt_module.html?highlight=virt)
+
+## Create VMs using XML templates ##
+Try to similar creation process for the VMs that already using for the KVM network, using XML file like shows below
+https://github.com/mrlesmithjr/ansible-kvm/blob/master/tasks/config_vms.yml
