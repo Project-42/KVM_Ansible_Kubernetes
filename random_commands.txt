@@ -1,0 +1,409 @@
+## Create Kmaster manually ##
+
+09:50:38 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ # cat Create_kmaster.sh
+#!/bin/bash
+## Stop and Delete kmaster
+virsh destroy  kmaster ;  sleep 10; virsh undefine kmaster --remove-all-storage
+
+
+## Create VMs
+
+      command: >
+                virt-install --connect qemu:///system
+                --name {{ item.value.name }}
+                --memory {{ item.value.mem }}
+                --vcpus {{ item.value.cpus }}
+                --disk {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+                --network network={{ network_name }},model={{ network_model }}
+                --mac={{ item.value.mac }}
+                --noautoconsole
+                --os-variant {{ item.value.os_type }}
+                --import
+
+
+## Delete Network
+
+network_name=Kubernetes
+
+virsh net-autostart $network_name --disable
+virsh net-destroy $network_name
+virsh net-undefine $network_name
+rm -f /etc/libvirt/qemu/networks/$network_name.xml
+rm -f /etc/libvirt/qemu/networks/autostart/$network_name.xml
+rm -f /var/lib/libvirt/dnsmasq/$network_name.addnhosts
+rm -f /var/lib/libvirt/dnsmasq/$network_name.hostsfile
+rm -f /var/lib/libvirt/dnsmasq/$network_name.leases
+rm -f /var/lib/libvirt/network/$network_name.xml
+rm -f /var/lib/libvirt/network/$network_name.addnhosts
+
+
+
+## Create Kubernetes Network
+
+network_name=Kubernetes
+myuuid=$(uuidgen)
+
+echo "<network>
+  <name>$network_name</name>
+  <uuid>$myuuid</uuid>
+  <forward mode='nat'>
+    <nat>
+      <port start='1024' end='65535'/>
+    </nat>
+  </forward>
+  <bridge name='virbr20' stp='on' delay='0'/>
+  <mac address='52:54:00:83:20:20'/>
+  <domain name='Kubernetes'/>
+  <ip address='10.10.1.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='10.10.1.10' end='10.10.1.50'/>
+      <host mac='52:54:00:6c:20:00' name='kmaster' ip='10.10.1.10'/>
+      <host mac='52:54:00:6c:20:01' name='knode1' ip='10.10.1.11'/>
+      <host mac='52:54:00:6c:20:02' name='knode2' ip='10.10.1.12'/>
+      <host mac='52:54:00:6c:20:03' name='knode3' ip='10.10.1.13'/>
+      <host mac='52:54:00:6c:20:04' name='knode4' ip='10.10.1.14'/>
+    </dhcp>
+  </ip>
+</network>" > /var/lib/libvirt/network/$network_name.xml
+
+echo "Defining $network_name.xml"
+virsh net-define /var/lib/libvirt/network/$network_name.xml
+
+echo "Starting network $network_name"
+virsh net-start $network_name
+
+echo "Enabling autostart on $network_name"
+virsh net-autostart $network_name
+
+
+
+
+
+
+
+## Create Kmaster manually
+virt-builder centos-8.0 \
+--format qcow2 \
+--size 20G \
+-o /home/kvm/HDD/disks/kmaster.qcow2 \
+--root-password password:Welcome1 \
+--ssh-inject root \
+--selinux-relabel
+
+sleep 5;
+
+virt-install \
+--name kmaster \
+--ram 4096 \
+--disk path=/home/kvm/HDD/disks/kmaster.qcow2 \
+--vcpus 4 \
+--os-type linux \
+--os-variant rhel8.0 \
+--network network=Kubernetes,model=virtio \
+--mac='52:54:00:6c:20:01' \
+--graphics none \
+--serial pty \
+--console pty \
+--boot hd \
+--noautoconsole \
+--import
+
+printf "%s" "Waiting for kmaster to respond to ping..."
+while ! ping -c 1 -n -w 1 kmaster &> /dev/null
+do
+    printf "%c" "."
+done
+printf "\n%s\n"  "kmaster is online"
+
+ssh-keygen -R kmaster
+ssh-keygen -R 10.10.1.10
+ssh-keyscan -H kmaster >> ~/.ssh/known_hosts
+ssh root@kmaster
+
+09:51:29 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ #
+
+
+
+
+
+## Delete Kubernetes script ##
+
+
+09:51:29 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ # cat Delete_Kubernetes.sh
+#!/bin/bash
+## Stop and Delete Kubernetes VMs
+virsh destroy  kmaster ;  sleep 5; virsh undefine kmaster --remove-all-storage
+virsh destroy  knode1 ;  sleep 5; virsh undefine knode1 --remove-all-storage
+virsh destroy  knode2 ;  sleep 5; virsh undefine knode2 --remove-all-storage
+virsh destroy  knode3 ;  sleep 5; virsh undefine knode3 --remove-all-storage
+
+
+## Delete Network
+
+#network_name=Kubernetes
+
+#virsh net-autostart $network_name --disable
+#virsh net-destroy $network_name
+#virsh net-undefine $network_name
+#rm -f /etc/libvirt/qemu/networks/$network_name.xml
+#rm -f /etc/libvirt/qemu/networks/autostart/$network_name.xml
+#rm -f /var/lib/libvirt/dnsmasq/$network_name.addnhosts
+#rm -f /var/lib/libvirt/dnsmasq/$network_name.hostsfile
+#rm -f /var/lib/libvirt/dnsmasq/$network_name.leases
+#rm -f /var/lib/libvirt/network/$network_name.xml
+#rm -f /var/lib/libvirt/network/$network_name.addnhosts
+
+ssh-keygen -R kmaster
+ssh-keygen -R knode1
+ssh-keygen -R knode2
+ssh-keygen -R knode3
+ssh-keygen -R 10.10.1.10
+ssh-keygen -R 10.10.1.11
+ssh-keygen -R 10.10.1.12
+ssh-keygen -R 10.10.1.13
+
+09:52:23 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ #
+
+
+
+
+
+## KUBERNETS COMMANDS ##
+
+kubeadm init \
+--pod-network-cidr="10.10.1.0/24" \
+--apiserver-advertise-address="10.10.1.10"
+
+
+
+kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.10.1.10
+
+
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+kubectl apply -f https://docs.projectcalico.org/v3.11/manifests/calico.yaml
+
+
+
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  
+
+
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+
+kubeadm join 10.10.1.10:6443 --token ibfln5.d1crx75pn8eiipp9 \
+     --discovery-token-ca-cert-hash sha256:28b912c10d0e3fc390232478cbaf86310b5f11957455d8d3508cacf5adceb8d4
+
+
+while :; do kubectl get nodes ; echo " " ; kubectl get pods --all-namespaces -o wide; sleep 5; done
+
+
+
+kubeadm reset -f; 
+
+rm -rf /etc/cni/net.d/* ; rm -f /etc/kubernetes/admin.conf $HOME/.kube/config
+*/
+
+
+kubectl get pods --all-namespaces
+
+
+geekflare@kubernetes-master:~$ sudo kubeadm init --apiserver-advertise-address=192.168.0.107 --pod-network-cidr=10.244.0.0/16
+
+
+
+
+
+
+## OLD CENTOS8 Playbook ##
+
+09:54:04 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ # cat install_kubernetes.yml.centos8
+---
+- name: kubernetes pre-req
+  hosts: kubernetes
+  tasks:
+    # Remove and Disable Swap
+    - name: Remove swapfile from /etc/fstab
+      mount:
+        name: "{{ item }}"
+        fstype: swap
+        state: absent
+      with_items:
+        - swap
+        - none
+
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+
+    # Disable Swap on 2 stpes
+    # More info https://germaniumhq.com/2019/02/14/2019-02-14-Disabling-Swap-for-Kubernetes-in-an-Ansible-Playbook/
+#    - name: Disable SWAP since kubernetes can't work with swap enabled (1/2)
+#      shell: |
+#        swapoff -a
+#      when: ansible_swaptotal_mb > 0
+
+
+#    - name: Disable SWAP in fstab since kubernetes can't work with swap enabled (2/2)
+#      replace:
+#        path: /etc/fstab
+#        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+#        replace: '# \1'
+
+
+
+    # Reload SystemD after disable swap and edit fstab file
+#    - name: Reload SystemD
+#      command: ""
+
+
+    # Fix for error sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-iptables.
+    - name: Workaround for sysctl error
+      command: "{{ item }}"
+      with_items:
+        - modprobe br_netfilter
+        - sysctl -p /etc/sysctl.conf
+#    - name: Fix error 1
+#      command: modprobe br_netfilter
+#    - name: Fix error 2
+#      command: sysctl -p /etc/sysctl.conf
+
+
+
+    # Set bridge-nf-call settings
+    # More info: https://stackoverflow.com/questions/44358236/ansible-sysctl-setting-bridge-nf-call-iptables-failed-sysctl-cannot-stat-proc
+    - name: update kernel settings
+      become: yes
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: "1"
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    # Disable SELINUX
+    - name: Disable SELinux
+      selinux:
+        state: disabled
+
+    # this task runs 'getenforce' and registers the result into the "sestatus" variable
+    # changed_when: false tells ansible never to mark this task as "changed"
+    - name: test to see if selinux is running
+      command: getenforce
+      register: sestatus
+
+    # this task tests to see if the output
+    - name: print a message if selinux is enabled
+      debug: msg="selinux is enabled"
+      when: '"Permissive" in sestatus.stdout'
+
+    # Reboot if selinux still enable
+    - name: reboot vms
+      reboot:
+      when: '"Permissive" in sestatus.stdout'
+
+
+    # Docker Installation tasks
+    - name: Install yum utils
+      yum:
+        name: yum-utils
+        state: latest
+
+    - name: Install device-mapper-persistent-data
+      yum:
+        name: device-mapper-persistent-data
+        state: latest
+
+    - name: Install lvm2
+      yum:
+        name: lvm2
+        state: latest
+
+    - name: Add Docker repo
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docer-ce.repo
+      become: yes
+
+    - name: Install Docker
+    # At the time being, installation of containerd.io > 1.2.0-3.el7 is blocked for centos8
+    # More info https://linoxide.com/linux-how-to/how-to-install-docker-on-centos/
+      command: dnf -y install docker-ce --nobest
+
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      become: yes
+
+    - name: Add user root to docker group
+      user:
+        name: root
+        groups: docker
+        append: yes
+      become: yes
+
+
+    # Install kubernets utilities
+    # Extra info
+    # https://github.com/geerlingguy/ansible-role-kubernetes
+    # https://kubernetes.io/blog/2019/03/15/kubernetes-setup-using-ansible-and-vagrant/
+    - name: Ensure Kubernetes repository exists.
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        enabled: true
+        gpgcheck: true
+        repo_gpgcheck: true
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgkey:
+          - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Add Kubernetes GPG keys.
+      rpm_key:
+        key: "{{ item }}"
+        state: present
+      register: kubernetes_rpm_key
+      with_items:
+        - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+        - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Make cache if Kubernetes GPG key changed.
+      command: "yum -q makecache -y --disablerepo='*' --enablerepo='kubernetes'"
+      when: kubernetes_rpm_key is changed
+      args:
+        warn: false
+
+   # Install kubelet/kubeadm/kubectl
+    - name: Install Kubernetes binaries
+      dnf:
+        name: "{{ packages }}"
+        state: present
+        update_cache: yes
+      vars:
+        packages:
+          - kubelet
+          - kubeadm
+          - kubectl
+
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: yes
+        state: restarted
+
+09:54:13 ⌚ solifugo@server in ~/Ansible/Kubernetes ○ #

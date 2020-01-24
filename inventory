@@ -1,0 +1,15 @@
+[all]
+server
+kmaster
+knode[1:2]
+
+[kubernetes]
+kmaster
+knode[1:2]
+
+[master]
+kmaster
+
+[nodes]
+knode[1:2]
+

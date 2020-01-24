@@ -1,0 +1,70 @@
+---
+
+###############################################
+##                                           ##
+## Delete KVM Network, VMs, etc              ##
+##                                           ##
+###############################################
+
+- name: create VMs
+  # Using server as out KVM HOST
+  # Will use user solifugo instead of default ansible.cfg user (root)
+  # Variables will get file mentioned below
+  hosts: server
+  become: true
+  become_user: solifugo
+  vars_files:
+    - kubernetes_variables_vms.yml
+
+
+  tasks:
+
+    - name: List all KVM Networks
+      virt_net: 
+        command: list_nets
+      register: exist    
+
+    #- debug: msg="{{ exist.list_nets }}"
+    
+    - name: Destroy Network
+      virt_net:
+        command: destroy
+        name: '{{ network_name }}'
+      when: network_name in exist.list_nets
+
+    - name: Unefine Network
+      virt_net:
+        command: undefine
+        name: '{{ network_name }}'
+      when: network_name in exist.list_nets
+
+    - name: list only running VMs
+      virt:
+        command: list_vms
+        state: running
+      register: running_vms
+
+    #- debug: msg="{{ running_vms.list_vms }}"
+
+    - name: Destroy VMs
+      virt:
+        command: destroy
+        name: '{{ item.value.name }}'
+      when: item.value.name in running_vms.list_vms
+      with_dict: "{{ guests }}"
+
+
+    - name: list all VMs
+      virt:
+        command: list_vms
+      register: all_vms
+
+    #- debug: msg="{{ all_vms.list_vms }}"
+
+
+    - name: Undefine and Delete VMs storage
+      command: virsh --connect qemu:///system undefine "{{ item.value.name }}" --remove-all-storage
+      when: item.value.name in all_vms.list_vms
+      with_dict: "{{ guests }}"
+
+      
