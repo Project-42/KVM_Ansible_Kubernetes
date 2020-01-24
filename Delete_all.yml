@@ -6,7 +6,7 @@
 ##                                           ##
 ###############################################
 
-- name: create VMs
+- name: Delete ALL
   # Using server as out KVM HOST
   # Will use user solifugo instead of default ansible.cfg user (root)
   # Variables will get file mentioned below
@@ -15,6 +15,7 @@
   become_user: "{{ lookup('env','USER') }}"
   vars_files:
     - kubernetes_variables_vms.yml
+
 
 
   tasks:

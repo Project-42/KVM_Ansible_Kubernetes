@@ -7,7 +7,6 @@
 ###############################################
 
 
-
 - name: create VMs
   # Using server as out KVM HOST
   # Will use user solifugo instead of default ansible.cfg user (root)

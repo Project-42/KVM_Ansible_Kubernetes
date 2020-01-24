@@ -1,4 +1,5 @@
 ---
+
 kvm_host: server
 
 bridge_name: kuberbr42
