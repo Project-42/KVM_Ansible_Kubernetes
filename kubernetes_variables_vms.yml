@@ -1,5 +1,5 @@
 ---
-kvm_host_user: solifugo
+kvm_host: server
 
 bridge_name: kuberbr42
 gateway_ip: 10.10.1.1
@@ -10,7 +10,6 @@ network_name: "Kubernetes"
 
 kube_network: flannel
 
-#vm_network: "network=Kubernetes,model=virtio"
 network_model: "virtio"
 vm_location: "/home/kvm/HDD/Kubernetes"
 root_pass: "Welcome1"
