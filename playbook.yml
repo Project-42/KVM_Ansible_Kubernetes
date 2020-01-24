@@ -12,7 +12,7 @@
   # Variables will get file mentioned below
   hosts: server
   become: true
-  become_user: solifugo
+  become_user: {{ kvm_host_user }}
   vars_files:
     - kubernetes_variables_vms.yml
 
