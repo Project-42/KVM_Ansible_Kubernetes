@@ -10,9 +10,9 @@
   # Using server as out KVM HOST
   # Will use user solifugo instead of default ansible.cfg user (root)
   # Variables will get file mentioned below
-  hosts: server
+  hosts: '{{ kvm_host }}'
   become: true
-  become_user: solifugo
+  become_user: "{{ lookup('env','USER') }}"
   vars_files:
     - kubernetes_variables_vms.yml
 
