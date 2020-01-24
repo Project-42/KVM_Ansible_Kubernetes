@@ -7,7 +7,7 @@ dhcp_range_start: 10.10.1.10
 dhcp_range_end: 10.10.1.15
 network_name: "Kubernetes"
 
-
+kube_network: flannel
 
 #vm_network: "network=Kubernetes,model=virtio"
 network_model: "virtio"
