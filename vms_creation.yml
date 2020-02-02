@@ -69,17 +69,26 @@
       changed_when: "disks.rc != 0"
 
 
-    - name: Create disk
-    # Create Disks using virt-builder so we get the OS image if is not already cached locally
-    # Set root password, inject ssh key from our server and relabel selinux
+    - name: Create Seed
+    # Create seed using virt-builder so we get the OS image if is not already cached locally
+    # Set root password, inject ssh key from kv_host, relabel selinux and update OS
       command: >
-               virt-builder --format {{ item.value.file_type }} {{ item.value.os_type }}
-               -o {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+               virt-builder --format {{ file_type }} {{ os_type }}
+               -o {{ vm_location }}/{{ seed_name }}.{{ file_type }}
                --root-password password:{{ root_pass }}
                --ssh-inject root
                --selinux-relabel
+               --update
+      when: seed_name not in disks.stdout
+
+
+    - name: Duplicate Seed
+      copy: 
+        src={{ vm_location }}/{{ seed_name }}.{{ file_type }} 
+        dest={{ vm_location }}/{{ item.value.name }}.{{ file_type }} 
       when: item.value.name not in disks.stdout
-      with_dict: "{{ guests }}"
+      with_dict: "{{ guests }}"  
+
 
     - name: Get list of VMs
     # Check VMs already created
@@ -102,7 +111,7 @@
                 --name {{ item.value.name }}
                 --memory {{ item.value.mem }}
                 --vcpus {{ item.value.cpus }}
-                --disk {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+                --disk {{ vm_location }}/{{ item.value.name }}.{{ file_type }}
                 --network network={{ network_name }},model={{ network_model }}
                 --mac={{ item.value.mac }}
                 --noautoconsole
