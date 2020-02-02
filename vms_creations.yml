@@ -1,0 +1,135 @@
+---
+
+###############################################
+##                                           ##
+## This first part will create VMs using KVM ##
+##                                           ##
+###############################################
+
+
+- name: create VMs
+  # Using server as out KVM HOST
+  # Will use user solifugo instead of default ansible.cfg user (root)
+  # Variables will get file mentioned below
+  hosts: '{{ kvm_host }}'
+  become: true
+  become_user: "{{ lookup('env','USER') }}"
+  vars_files:
+    - variables.yml
+
+  tasks:
+
+    - name: List all KVM Networks
+      virt_net: 
+        command: list_nets
+      register: exist
+
+    #- debug: msg="{{ exist.list_nets }}"
+
+
+    - name: Define Network
+      virt_net:
+        command: define
+        name: '{{ network_name }}'
+        xml: "{{ lookup('template', 'vm-network.xml.j2') }}"
+      when: not network_name in exist.list_nets
+
+    - name: Create Network
+      virt_net:
+        command: create
+        name: '{{ network_name }}'
+      when: not network_name in exist.list_nets
+
+
+    - name: Modify Network
+      virt_net:
+        name: '{{ network_name }}'
+        command: modify
+        xml: "<host mac='{{ item.value.mac }}' name='{{ item.value.name }}' ip='{{ item.value.ip }}'/>"
+      loop: "{{ lookup('dict', guests) }}"
+
+    - name: Autostart Network
+      virt_net:
+        name: '{{ network_name }}'
+        autostart: yes
+
+
+    - name: Create a directory if it does not exist
+    # Check and create vm_location directory if doesnt exist
+    # Give enough priviledges to the directory so qemu user can use it
+      file:
+        path: "{{ vm_location }}"
+        state: directory
+        mode: '0755'
+
+    - name: Get VM disks
+    # Check if Disks are already created
+      command: "ls {{ vm_location }}"
+      register: disks
+      changed_when: "disks.rc != 0"
+
+
+    - name: Create disk
+    # Create Disks using virt-builder so we get the OS image if is not already cached locally
+    # Set root password, inject ssh key from our server and relabel selinux
+      command: >
+               virt-builder --format {{ item.value.file_type }} {{ item.value.os_type }}
+               -o {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+               --root-password password:{{ root_pass }}
+               --ssh-inject root
+               --selinux-relabel
+      when: item.value.name not in disks.stdout
+      with_dict: "{{ guests }}"
+
+    - name: Get list of VMs
+    # Check VMs already created
+      virt:
+        command: "list_vms"
+      register: vms
+
+
+
+    - name: Create vms
+    # Extra information
+    # https://mangolassi.it/topic/15257/ansible-create-kvm-guests
+    # https://hooks.technology/2017/10/create-vms-on-kvm-with-ansible/
+    # Create the VMs using the variable file we have at the start of the playbook
+    # Added explicit connection to qemu:///system since ansible doenst read user bashrc file
+    # Added noutoconsole so systme dont connect to the new VM during creation
+    # Added explicit mac from variables file to have more control over VMs IPs
+      command: >
+                virt-install --connect qemu:///system
+                --name {{ item.value.name }}
+                --memory {{ item.value.mem }}
+                --vcpus {{ item.value.cpus }}
+                --disk {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+                --network network={{ network_name }},model={{ network_model }}
+                --mac={{ item.value.mac }}
+                --noautoconsole
+                --import
+      when: item.value.name not in vms.list_vms
+      with_dict: "{{ guests }}"
+
+    - name: start vm
+    # Start the VMs. VMs are not set to autostart. This will start them after server restart
+      virt:
+        name: "{{ item.value.name }}"
+        state: running
+      with_dict: "{{ guests }}"
+
+    - name: Test reachability
+    # This part will make sure ssh port is open before the next steps starts
+      wait_for:
+        host: "{{ item.value.name }}"
+        port: 22
+      with_dict: "{{ guests }}"
+
+- name: hostname
+  hosts: kubernetes
+  tasks: 
+    - name: Update hostname using hostname
+    # Change hostname of the servers
+      hostname: 
+        name: "{{inventory_hostname}}"
+
+

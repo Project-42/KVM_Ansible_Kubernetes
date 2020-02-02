@@ -1,0 +1,436 @@
+---
+
+###############################################
+##                                           ##
+## This first part will create VMs using KVM ##
+##                                           ##
+###############################################
+
+
+- name: create VMs
+  # Using server as out KVM HOST
+  # Will use user solifugo instead of default ansible.cfg user (root)
+  # Variables will get file mentioned below
+  hosts: '{{ kvm_host }}'
+  become: true
+  become_user: "{{ lookup('env','USER') }}"
+  vars_files:
+    - kubernetes_variables_vms.yml
+
+  tasks:
+
+    - name: List all KVM Networks
+      virt_net: 
+        command: list_nets
+      register: exist
+
+    #- debug: msg="{{ exist.list_nets }}"
+
+
+    - name: Define Network
+      virt_net:
+        command: define
+        name: '{{ network_name }}'
+        xml: "{{ lookup('template', 'vm-network.xml.j2') }}"
+      when: not network_name in exist.list_nets
+
+    - name: Create Network
+      virt_net:
+        command: create
+        name: '{{ network_name }}'
+      when: not network_name in exist.list_nets
+
+
+    - name: Modify Network
+      virt_net:
+        name: '{{ network_name }}'
+        command: modify
+        xml: "<host mac='{{ item.value.mac }}' name='{{ item.value.name }}' ip='{{ item.value.ip }}'/>"
+      loop: "{{ lookup('dict', guests) }}"
+
+    - name: Autostart Network
+      virt_net:
+        name: '{{ network_name }}'
+        autostart: yes
+
+
+    - name: Create a directory if it does not exist
+    # Check and create vm_location directory if doesnt exist
+    # Give enough priviledges to the directory so qemu user can use it
+      file:
+        path: "{{ vm_location }}"
+        state: directory
+        mode: '0755'
+
+    - name: Get VM disks
+    # Check if Disks are already created
+      command: "ls {{ vm_location }}"
+      register: disks
+      changed_when: "disks.rc != 0"
+
+
+    - name: Create disk
+    # Create Disks using virt-builder so we get the OS image if is not already cached locally
+    # Set root password, inject ssh key from our server and relabel selinux
+      command: >
+               virt-builder --format {{ item.value.file_type }} {{ item.value.os_type }}
+               -o {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+               --root-password password:{{ root_pass }}
+               --ssh-inject root
+               --selinux-relabel
+      when: item.value.name not in disks.stdout
+      with_dict: "{{ guests }}"
+
+    - name: Get list of VMs
+    # Check VMs already created
+      virt:
+        command: "list_vms"
+      register: vms
+
+
+
+    - name: Create vms
+    # Extra information
+    # https://mangolassi.it/topic/15257/ansible-create-kvm-guests
+    # https://hooks.technology/2017/10/create-vms-on-kvm-with-ansible/
+    # Create the VMs using the variable file we have at the start of the playbook
+    # Added explicit connection to qemu:///system since ansible doenst read user bashrc file
+    # Added noutoconsole so systme dont connect to the new VM during creation
+    # Added explicit mac from variables file to have more control over VMs IPs
+      command: >
+                virt-install --connect qemu:///system
+                --name {{ item.value.name }}
+                --memory {{ item.value.mem }}
+                --vcpus {{ item.value.cpus }}
+                --disk {{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }}
+                --network network={{ network_name }},model={{ network_model }}
+                --mac={{ item.value.mac }}
+                --noautoconsole
+                --import
+      when: item.value.name not in vms.list_vms
+      with_dict: "{{ guests }}"
+
+    - name: start vm
+    # Start the VMs. VMs are not set to autostart. This will start them after server restart
+      virt:
+        name: "{{ item.value.name }}"
+        state: running
+      with_dict: "{{ guests }}"
+
+    - name: Test reachability
+    # This part will make sure ssh port is open before the next steps starts
+      wait_for:
+        host: "{{ item.value.name }}"
+        port: 22
+      with_dict: "{{ guests }}"
+
+- name: hostname
+  hosts: kubernetes
+  tasks: 
+    - name: Update hostname using hostname
+    # Change hostname of the servers
+      hostname: 
+        name: "{{inventory_hostname}}"
+
+
+
+
+
+#########################################################
+##                                                     ##
+## This part will complete Kubenertes pre-requirements ##
+##                                                     ##
+#########################################################
+
+
+
+- name: Kubenertes requirements
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+#   strategy: free
+  # Using "Free startegy" so the yum update is faster.
+  #There is not huge difference, but looks a bit faster
+
+  tasks:
+    - name: Disable swap
+    # Disable Swap from current session
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Remove swapfile from /etc/fstab
+    # Remove Swap from fstab
+      mount:
+        name: "{{ item }}"
+        fstype: swap
+        state: absent
+      with_items:
+        - swap
+
+
+    # Set bridge-nf-call settings
+    # More info: https://stackoverflow.com/questions/44358236/ansible-sysctl-setting-bridge-nf-call-iptables-failed-sysctl-cannot-stat-proc
+    - name: update kernel settings
+      become: yes
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: "1"
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+
+
+    - name: Disable SELinux
+    # Disable SELINUX
+      selinux:
+        state: disabled
+
+    - name: test to see if selinux is running
+    # this task runs 'getenforce' and registers the result into the "sestatus" variable
+    # changed_when: false tells ansible never to mark this task as "changed"
+      command: getenforce
+      register: sestatus
+
+    - name: print a message if selinux is enabled
+    # this task tests to see if the output
+      debug: msg="selinux is enabled"
+      when: '"Permissive" in sestatus.stdout'
+
+    - name: reboot vms
+    # Reboot if selinux still enable
+      reboot:
+      when: '"Permissive" in sestatus.stdout'
+
+    - name: Install yum-utils lvm2 device-mapper-persistent-data
+      yum:
+        name: 
+          - yum-utils
+          - lvm2
+          - device-mapper-persistent-data
+
+
+    - name: Add docker-ce-stable repository
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+
+
+- name: Update all nodes and install docker-ce
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+  # strategy: free
+
+  tasks:
+    - name: upgrade all packages
+    # This should be a yum update equivalent
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Install Docker
+      package:
+        name: docker-ce
+        state: latest
+      become: yes
+      register: dockerinstall
+
+
+- name: Continue Kubenertes requirements
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+  # strategy: free
+
+  tasks:
+    - name: Add user root to docker group
+      user:
+        name: root
+        groups: docker
+        append: yes
+      become: yes
+
+    - name: enable service docker
+      systemd:
+        name: docker
+        enabled: yes
+        masked: no
+
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+
+
+    # Install kubernets utilities
+    # Extra info
+    # https://github.com/geerlingguy/ansible-role-kubernetes
+    # https://kubernetes.io/blog/2019/03/15/kubernetes-setup-using-ansible-and-vagrant/
+    - name: Ensure Kubernetes repository exists.
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        enabled: yes
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgkey:
+          - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Add Kubernetes GPG keys.
+      rpm_key:
+        key: "{{ item }}"
+        state: present
+      register: kubernetes_rpm_key
+      with_items:
+        - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+        - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Make cache if Kubernetes GPG key changed.
+      command: "yum -q makecache -y --disablerepo='*' --enablerepo='kubernetes'"
+      when: kubernetes_rpm_key is changed
+      args:
+        warn: false
+
+    - name: Install packages kubelet kubeadm kubectl
+    # Install kubelet/kubeadm/kubectl
+      yum:
+        name: 
+          - kubelet
+          - kubeadm
+          - kubectl
+
+    - name: enable service kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+        masked: no
+
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: yes
+        state: restarted
+
+    - name: Stop and disable firewalld.
+      service:
+        name: firewalld
+        state: stopped
+        enabled: False
+
+
+
+
+
+
+#########################################################
+##                                                     ##
+## This part will complete Kubenertes cluster creation ##
+##                                                     ##
+#########################################################
+
+
+
+
+- name: kmaster configuration
+  hosts: kmaster
+  vars_files:
+    - kubernetes_variables_vms.yml
+  tasks:
+
+    # More info https://github.com/geerlingguy/ansible-role-kubernetes/blob/master/tasks/master-setup.yml
+    - name: Check whether Kubernetes has already been initialized.
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubernetes_init_stat
+    # More info https://geekflare.com/install-kubernetes-on-ubuntu/
+    # Using pod-network-cidr=10.244.0.0/16 for flannel
+
+    - name: Initialize Kubernetes master using flannel
+      command: >
+        kubeadm init
+        --pod-network-cidr=10.244.0.0/16
+        --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
+      register: kubeadmin_init
+      failed_when: false
+      when: not kubernetes_init_stat.stat.exists and kube_network == "flannel"
+
+    - name: Initialize Kubernetes master using calico
+      command: >
+         kubeadm init
+         --pod-network-cidr=192.168.0.0/16
+         --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
+      register: kubeadmin_init
+      failed_when: false
+      when: not kubernetes_init_stat.stat.exists and kube_network == "calico"
+
+
+
+    # Print the init output to screen.
+    #- debug: var=kubeadmin_init.stdout
+
+    - name: Setup kubeconfig for root user
+      file:
+        path: "/root/.kube"
+        state: directory
+
+    - name: check if configuration is alredy in root home
+      stat:
+        path: /root/.kube/config
+      register: kube_config_file
+
+    - name: copy configuration from etc
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        remote_src: yes
+      when: not kube_config_file.stat.exists
+
+
+
+
+
+    - name: Install calico pod network
+      become: false
+      command: kubectl apply -f https://docs.projectcalico.org/v3.11/manifests/calico.yaml
+      when: kube_network == "calico"
+
+    - name: Install flannel pod network
+      command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      when: kube_network == "flannel"
+
+    - name: Generate join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Copy join command to local file
+      local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./knodes-join-command"
+
+- name: kubernetes cluster creation
+  hosts: nodes
+  tasks:
+    - name: Copy the join command to server location
+      copy: src=knodes-join-command dest=/tmp/knodes-join-command.sh mode=0777
+    - name: Join the node to cluster
+      command: sh /tmp/knodes-join-command.sh
+
+    - name: Delete Join command file from KVM_HOST
+      local_action: file path="./knodes-join-command" state=absent
+
+
+
+# I have an issue and need to restart the master in order to complete the init
+- name: kmaster restart
+  hosts: kmaster
+  tasks:
+    - name: Reboot kmaster
+      reboot:
+

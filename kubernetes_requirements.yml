@@ -1,0 +1,188 @@
+---
+#########################################################
+##                                                     ##
+## This part will complete Kubenertes pre-requirements ##
+##                                                     ##
+#########################################################
+
+
+- name: Kubenertes requirements
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+#   strategy: free
+  # Using "Free startegy" so the yum update is faster.
+  #There is not huge difference, but looks a bit faster
+
+  tasks:
+    - name: Disable swap
+    # Disable Swap from current session
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Remove swapfile from /etc/fstab
+    # Remove Swap from fstab
+      mount:
+        name: "{{ item }}"
+        fstype: swap
+        state: absent
+      with_items:
+        - swap
+
+
+    # Set bridge-nf-call settings
+    # More info: https://stackoverflow.com/questions/44358236/ansible-sysctl-setting-bridge-nf-call-iptables-failed-sysctl-cannot-stat-proc
+    - name: update kernel settings
+      become: yes
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: "1"
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+
+
+    - name: Disable SELinux
+    # Disable SELINUX
+      selinux:
+        state: disabled
+
+    - name: test to see if selinux is running
+    # this task runs 'getenforce' and registers the result into the "sestatus" variable
+    # changed_when: false tells ansible never to mark this task as "changed"
+      command: getenforce
+      register: sestatus
+
+    - name: print a message if selinux is enabled
+    # this task tests to see if the output
+      debug: msg="selinux is enabled"
+      when: '"Permissive" in sestatus.stdout'
+
+    - name: reboot vms
+    # Reboot if selinux still enable
+      reboot:
+      when: '"Permissive" in sestatus.stdout'
+
+    - name: Install yum-utils lvm2 device-mapper-persistent-data
+      yum:
+        name: 
+          - yum-utils
+          - lvm2
+          - device-mapper-persistent-data
+
+
+    - name: Add docker-ce-stable repository
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+
+
+- name: Update all nodes and install docker-ce
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+  # strategy: free
+
+  tasks:
+    - name: upgrade all packages
+    # This should be a yum update equivalent
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Install Docker
+      package:
+        name: docker-ce
+        state: latest
+      become: yes
+      register: dockerinstall
+
+
+- name: Continue Kubenertes requirements
+  hosts: kubernetes
+  # Using kubernetes list of hosts from inventory
+  # strategy: free
+
+  tasks:
+    - name: Add user root to docker group
+      user:
+        name: root
+        groups: docker
+        append: yes
+      become: yes
+
+    - name: enable service docker
+      systemd:
+        name: docker
+        enabled: yes
+        masked: no
+
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+
+
+    # Install kubernets utilities
+    # Extra info
+    # https://github.com/geerlingguy/ansible-role-kubernetes
+    # https://kubernetes.io/blog/2019/03/15/kubernetes-setup-using-ansible-and-vagrant/
+    - name: Ensure Kubernetes repository exists.
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        enabled: yes
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgkey:
+          - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Add Kubernetes GPG keys.
+      rpm_key:
+        key: "{{ item }}"
+        state: present
+      register: kubernetes_rpm_key
+      with_items:
+        - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+        - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+    - name: Make cache if Kubernetes GPG key changed.
+      command: "yum -q makecache -y --disablerepo='*' --enablerepo='kubernetes'"
+      when: kubernetes_rpm_key is changed
+      args:
+        warn: false
+
+    - name: Install packages kubelet kubeadm kubectl
+    # Install kubelet/kubeadm/kubectl
+      yum:
+        name: 
+          - kubelet
+          - kubeadm
+          - kubectl
+
+    - name: enable service kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+        masked: no
+
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: yes
+        state: restarted
+
+    - name: Stop and disable firewalld.
+      service:
+        name: firewalld
+        state: stopped
+        enabled: False
+

@@ -1,0 +1,104 @@
+---
+#########################################################
+##                                                     ##
+## This part will complete Kubenertes cluster creation ##
+##                                                     ##
+#########################################################
+
+
+- name: kmaster configuration
+  hosts: kmaster
+  vars_files:
+    - variables.yml
+  tasks:
+
+    # More info https://github.com/geerlingguy/ansible-role-kubernetes/blob/master/tasks/master-setup.yml
+    - name: Check whether Kubernetes has already been initialized.
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubernetes_init_stat
+    # More info https://geekflare.com/install-kubernetes-on-ubuntu/
+    # Using pod-network-cidr=10.244.0.0/16 for flannel
+
+    - name: Initialize Kubernetes master using flannel
+      command: >
+        kubeadm init
+        --pod-network-cidr=10.244.0.0/16
+        --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
+      register: kubeadmin_init
+      failed_when: false
+      when: not kubernetes_init_stat.stat.exists and kube_network == "flannel"
+
+    - name: Initialize Kubernetes master using calico
+      command: >
+         kubeadm init
+         --pod-network-cidr=192.168.0.0/16
+         --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
+      register: kubeadmin_init
+      failed_when: false
+      when: not kubernetes_init_stat.stat.exists and kube_network == "calico"
+
+
+
+    # Print the init output to screen.
+    #- debug: var=kubeadmin_init.stdout
+
+    - name: Setup kubeconfig for root user
+      file:
+        path: "/root/.kube"
+        state: directory
+
+    - name: check if configuration is alredy in root home
+      stat:
+        path: /root/.kube/config
+      register: kube_config_file
+
+    - name: copy configuration from etc
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        remote_src: yes
+      when: not kube_config_file.stat.exists
+
+
+
+
+
+    - name: Install calico pod network
+      become: false
+      command: kubectl apply -f https://docs.projectcalico.org/v3.11/manifests/calico.yaml
+      when: kube_network == "calico"
+
+    - name: Install flannel pod network
+      command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      when: kube_network == "flannel"
+
+    - name: Generate join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Copy join command to local file
+      local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./knodes-join-command"
+
+- name: kubernetes cluster creation
+  hosts: nodes
+  tasks:
+    - name: Copy the join command to server location
+      copy: src=knodes-join-command dest=/tmp/knodes-join-command.sh mode=0777
+    - name: Join the node to cluster
+      command: sh /tmp/knodes-join-command.sh
+
+    - name: Delete Join command file from KVM_HOST
+      local_action: file path="./knodes-join-command" state=absent
+
+
+
+# I have an issue and need to restart the master in order to complete the init
+- name: kmaster restart
+  hosts: kmaster
+  tasks:
+    - name: Reboot kmaster
+      reboot:
+
