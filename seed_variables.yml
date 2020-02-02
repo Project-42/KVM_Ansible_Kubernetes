@@ -25,6 +25,8 @@ kube_network: "flannel"
 vm_location: "/home/kvm/HDD/Kubernetes"
 root_pass: "Welcome1"
 
+seed_name: kseed
+
 os_type: centos-7.0
 file_type: qcow2
 

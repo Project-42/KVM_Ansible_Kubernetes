@@ -85,16 +85,16 @@
     - name: Create Seed
       command: >
                virt-builder --format {{ file_type }} {{ os_type }}
-               -o {{ vm_location }}/kseed.{{ file_type }}
+               -o {{ vm_location }}/{{ seed_name }}.{{ file_type }}
                --root-password password:{{ root_pass }}
                --ssh-inject root
                --selinux-relabel
                --update
-      when: kseed not in disks.stdout
+      when: seed_name not in disks.stdout
 
     - name: Duplicate Seed
       copy: 
-        src={{ vm_location }}/kseed.{{ file_type }} 
+        src={{ vm_location }}/{{ seed_name }}.{{ file_type }} 
         dest={{ vm_location }}/{{ item.value.name }}.{{ item.value.file_type }} 
       when: item.value.name not in disks.stdout
       with_dict: "{{ guests }}"      

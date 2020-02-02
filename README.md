@@ -51,6 +51,7 @@ remote_user=root
 This is the main configuration file.
 Here, you will need to set all parameters for the playbook to work
 
+
 ```---
 kvm_host_user: solifugo
 
