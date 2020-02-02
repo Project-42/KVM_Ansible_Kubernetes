@@ -1,7 +1,7 @@
 ---
 
 # vms_creations.yml will create the kvm VMs in the kvm_host
-- import_playbook: vms_creations.yml
+- import_playbook: vms_creation.yml
 
 # kubernetes_requirements.yml will modify VMs to install docker/kubernetes software
 - import_playbook: kubernetes_requirements.yml
