@@ -14,7 +14,7 @@
   become: true
   become_user: "{{ lookup('env','USER') }}"
   vars_files:
-    - kubernetes_variables_vms.yml
+    - variables.yml
 
 
 

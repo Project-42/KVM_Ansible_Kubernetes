@@ -46,7 +46,7 @@ inventory=./inventory
 remote_user=root
 ```
 
-- *kubernetes_variables_vms.yml*
+- *variables.yml*
 
 This is the main configuration file.
 Here, you will need to set all parameters for the playbook to work
