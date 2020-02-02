@@ -1,6 +1,6 @@
 ---
 
-kvm_host: server
+kvm_host: localhost
 
 bridge_name: kuberbr42
 gateway_ip: 10.10.1.1
@@ -9,7 +9,8 @@ dhcp_range_start: 10.10.1.10
 dhcp_range_end: 10.10.1.15
 network_name: "Kubernetes"
 
-kube_network: flannel
+#You can use flannel or calico network#
+kube_network: "flannel"
 
 network_model: "virtio"
 vm_location: "/home/kvm/HDD/Kubernetes"

@@ -23,7 +23,7 @@
       virt_net: 
         command: list_nets
       register: exist
-    
+
     #- debug: msg="{{ exist.list_nets }}"
 
 
@@ -33,7 +33,7 @@
         name: '{{ network_name }}'
         xml: "{{ lookup('template', 'vm-network.xml.j2') }}"
       when: not network_name in exist.list_nets
-    
+
     - name: Create Network
       virt_net:
         command: create
@@ -41,7 +41,7 @@
       when: not network_name in exist.list_nets
 
 
-    - name: Modify Network 
+    - name: Modify Network
       virt_net:
         name: '{{ network_name }}'
         command: modify
@@ -123,7 +123,6 @@
         host: "{{ item.value.name }}"
         port: 22
       with_dict: "{{ guests }}"
-    
 
 - name: hostname
   hosts: kubernetes
@@ -149,7 +148,7 @@
   hosts: kubernetes
   # Using kubernetes list of hosts from inventory
 #   strategy: free
-  # Using "Free startegy" so the yum update is faster. 
+  # Using "Free startegy" so the yum update is faster.
   #There is not huge difference, but looks a bit faster
 
   tasks:
@@ -193,7 +192,7 @@
       register: sestatus
 
     - name: print a message if selinux is enabled
-    # this task tests to see if the output 
+    # this task tests to see if the output
       debug: msg="selinux is enabled"
       when: '"Permissive" in sestatus.stdout'
 
@@ -305,7 +304,7 @@
         name: 
           - kubelet
           - kubeadm
-          - kubectl          
+          - kubectl
 
     - name: enable service kubelet
       systemd:
@@ -318,7 +317,7 @@
         name: kubelet
         daemon_reload: yes
         state: restarted
-    
+
     - name: Stop and disable firewalld.
       service:
         name: firewalld
@@ -341,22 +340,37 @@
 
 - name: kmaster configuration
   hosts: kmaster
+  vars_files:
+    - kubernetes_variables_vms.yml
   tasks:
+
     # More info https://github.com/geerlingguy/ansible-role-kubernetes/blob/master/tasks/master-setup.yml
     - name: Check whether Kubernetes has already been initialized.
       stat:
         path: /etc/kubernetes/admin.conf
       register: kubernetes_init_stat
     # More info https://geekflare.com/install-kubernetes-on-ubuntu/
-    # Using pod-network-cidr=10.244.0.0/16 for flannel 
-    - name: Initialize Kubernetes master with kubeadm init.
+    # Using pod-network-cidr=10.244.0.0/16 for flannel
+
+    - name: Initialize Kubernetes master using flannel
       command: >
         kubeadm init
         --pod-network-cidr=10.244.0.0/16
         --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
       register: kubeadmin_init
       failed_when: false
-      when: not kubernetes_init_stat.stat.exists
+      when: not kubernetes_init_stat.stat.exists and kube_network == "flannel"
+
+    - name: Initialize Kubernetes master using calico
+      command: >
+         kubeadm init
+         --pod-network-cidr=192.168.0.0/16
+         --apiserver-advertise-address="{{ ansible_default_ipv4.address }}"
+      register: kubeadmin_init
+      failed_when: false
+      when: not kubernetes_init_stat.stat.exists and kube_network == "calico"
+
+
 
     # Print the init output to screen.
     #- debug: var=kubeadmin_init.stdout
@@ -384,22 +398,21 @@
 
 
 
-#    Will need to check on this for next version/revision
-#    - name: Install calico pod network
-#      become: false
-#      command: kubectl apply -f https://docs.projectcalico.org/v3.11/manifests/calico.yaml
-#      when: {{ kube_network }} is calico
+    - name: Install calico pod network
+      become: false
+      command: kubectl apply -f https://docs.projectcalico.org/v3.11/manifests/calico.yaml
+      when: kube_network == "calico"
 
     - name: Install flannel pod network
       command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-
+      when: kube_network == "flannel"
 
     - name: Generate join command
       command: kubeadm token create --print-join-command
       register: join_command
 
     - name: Copy join command to local file
-      local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./knodes-join-command"     
+      local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./knodes-join-command"
 
 - name: kubernetes cluster creation
   hosts: nodes
@@ -408,7 +421,7 @@
       copy: src=knodes-join-command dest=/tmp/knodes-join-command.sh mode=0777
     - name: Join the node to cluster
       command: sh /tmp/knodes-join-command.sh
-    
+
     - name: Delete Join command file from KVM_HOST
       local_action: file path="./knodes-join-command" state=absent
 
