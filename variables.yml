@@ -21,8 +21,8 @@ network_model: "virtio"
 #You can use flannel or calico network#
 kube_network: "flannel"
 
-
-vm_location: "/home/kvm/HDD/Kubernetes"
+# To change vm_location, remember to add quemu user priviledges to that folder
+vm_location: "/var/lib/libvirt/images"
 root_pass: "Welcome1"
 
 seed_name: kseed
