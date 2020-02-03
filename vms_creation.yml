@@ -31,7 +31,7 @@
       virt_net:
         command: define
         name: '{{ network_name }}'
-        xml: "{{ lookup('template', 'vm-network.xml.j2') }}"
+        xml: "{{ lookup('template', 'vmnetwork_template.xml.j2') }}"
       when: not network_name in exist.list_nets
 
     - name: Create Network
@@ -98,33 +98,56 @@
 
 
 
-    - name: Create vms
-    # Extra information
-    # https://mangolassi.it/topic/15257/ansible-create-kvm-guests
-    # https://hooks.technology/2017/10/create-vms-on-kvm-with-ansible/
-    # Create the VMs using the variable file we have at the start of the playbook
-    # Added explicit connection to qemu:///system since ansible doenst read user bashrc file
-    # Added noutoconsole so systme dont connect to the new VM during creation
-    # Added explicit mac from variables file to have more control over VMs IPs
-      command: >
-                virt-install --connect qemu:///system
-                --name {{ item.value.name }}
-                --memory {{ item.value.mem }}
-                --vcpus {{ item.value.cpus }}
-                --disk {{ vm_location }}/{{ item.value.name }}.{{ file_type }}
-                --network network={{ network_name }},model={{ network_model }}
-                --mac={{ item.value.mac }}
-                --noautoconsole
-                --import
+#    - name: Create vms
+#    # Extra information
+#    # https://mangolassi.it/topic/15257/ansible-create-kvm-guests
+#    # https://hooks.technology/2017/10/create-vms-on-kvm-with-ansible/
+#    # Create the VMs using the variable file we have at the start of the playbook
+#    # Added explicit connection to qemu:///system since ansible doenst read user bashrc file
+#    # Added noutoconsole so systme dont connect to the new VM during creation
+#    # Added explicit mac from variables file to have more control over VMs IPs
+#      command: >
+#                virt-install --connect qemu:///system
+#                --name {{ item.value.name }}
+#                --memory {{ item.value.mem }}
+#                --vcpus {{ item.value.cpus }}
+#                --disk {{ vm_location }}/{{ item.value.name }}.{{ file_type }}
+#                --network network={{ network_name }},model={{ network_model }}
+#                --mac={{ item.value.mac }}
+#                --noautoconsole
+#                --import
+#      when: item.value.name not in vms.list_vms
+#      with_dict: "{{ guests }}"
+
+
+    - name: define vm
+      virt:
+        command: define
+        xml: "{{ lookup('template', 'vms_template.xml.j2') }}"
+        #uri: 'qemu:///system'
       when: item.value.name not in vms.list_vms
       with_dict: "{{ guests }}"
 
+
+
+
+
     - name: start vm
-    # Start the VMs. VMs are not set to autostart. This will start them after server restart
       virt:
         name: "{{ item.value.name }}"
         state: running
       with_dict: "{{ guests }}"
+
+
+
+
+
+#    - name: start vm
+#    # Start the VMs. VMs are not set to autostart. This will start them after server restart
+#      virt:
+#        name: "{{ item.value.name }}"
+#        state: running
+#      with_dict: "{{ guests }}"
 
     - name: Test reachability
     # This part will make sure ssh port is open before the next steps starts
