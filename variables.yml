@@ -18,6 +18,16 @@ dhcp_range_end: 10.10.1.15
 network_name: "Kubernetes"
 network_model: "virtio"
 
+
+
+#Will try to use ipmath to simplify variables
+#https://docs.ansible.com/ansible/2.7/user_guide/playbooks_filters_ipaddr.html#ip-math
+# {{ '192.168.1.5' | ipmath(5) }}
+#192.168.1.10
+# {{ '192.168.0.5' | ipmath(-10) }}
+#192.167.255.251
+
+
 #You can use flannel or calico network#
 kube_network: "flannel"
 
