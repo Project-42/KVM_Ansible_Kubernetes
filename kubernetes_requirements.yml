@@ -31,14 +31,25 @@
 
     # Set bridge-nf-call settings
     # More info: https://stackoverflow.com/questions/44358236/ansible-sysctl-setting-bridge-nf-call-iptables-failed-sysctl-cannot-stat-proc
-    - name: update kernel settings
-      become: yes
-      sysctl:
-        name: net.bridge.bridge-nf-call-iptables
-        value: "1"
-        sysctl_set: yes
-        state: present
-        reload: yes
+#    - name: update kernel settings
+#      become: yes
+#      sysctl:
+#        name: net.bridge.bridge-nf-call-iptables
+#        value: "1"
+#        sysctl_set: yes
+#        state: present
+#        reload: yes
+
+
+
+    - name: Set bridge-nf-call settings
+    # Disable Swap from current session
+      command: "{{ item }}"
+      with_items:
+        - modprobe bridge
+        - echo "net.bridge.bridge-nf-call-iptables = 1" >> /etc/sysctl.conf
+        - modprobe br_netfilter
+        - sysctl -p /etc/sysctl.conf
 
 
 
