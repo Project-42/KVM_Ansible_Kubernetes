@@ -68,4 +68,22 @@
       when: item.value.name in all_vms.list_vms
       with_dict: "{{ guests }}"
 
+
+    - name: Get VM disks
+    # Check if Disks are already created
+      command: "ls {{ vm_location }}"
+      register: disks
+      changed_when: "disks.rc != 0"
+
+    
+    # Manually delete VMs disks
+    - name: Delete VMs Disks
+      file:
+        state: absent
+        path: "{{ vm_location }}/{{ item.value.name }}.{{ file_type }}"
+      when: item.value.name in disks.stdout
+      with_dict: "{{ guests }}"
+
+
+
       
