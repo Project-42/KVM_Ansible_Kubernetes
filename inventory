@@ -1,5 +1,4 @@
 [all]
-server
 kmaster
 knode[1:2]
 
