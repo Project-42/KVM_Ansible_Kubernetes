@@ -33,7 +33,7 @@ network_model: "virtio"
 kube_network: "flannel"
 
 # To change vm_location, remember to add quemu user priviledges to that folder
-vm_location: "/home/kvm/HDD/Kubernetes"
+vm_location: "{{ playbook_dir }}/KVM_Disks"
 
 root_pass: "Welcome1"
 
