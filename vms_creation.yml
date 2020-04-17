@@ -115,6 +115,7 @@
 
 
     - name: add Kbernetes line to /etc/hosts
+      # Adding title to /etc/hosts file
       become: yes
       become_user: root
       lineinfile:
@@ -123,6 +124,7 @@
         state: present
 
     - name: add a list of hosts to /etc/hosts
+    # Adding nodes names and IPs to server /etc/hosts
       become: yes
       become_user: root
       lineinfile:
@@ -130,7 +132,7 @@
         regexp: "^{{ item.value.ip }}.*$"
         line: "{{item.value.ip}} {{item.value.name}}"
         state: present
-      with_dict: "{{ guests }}" 
+      with_dict: "{{ guests }}"
 
 
 
