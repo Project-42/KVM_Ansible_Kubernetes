@@ -28,7 +28,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    #<emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='{{file_type}}'/>
       <source file='{{vm_location}}/{{item.value.name}}.{{file_type}}'/>
