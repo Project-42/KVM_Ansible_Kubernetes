@@ -127,6 +127,15 @@ In order to get the playbook working, is necessary to add the VMs hostname and I
 I added that step into the initial playbook file `vms_creation.ym`, so Im using `become_user: root`, or just add them directly before the ansible execution.
 Should end like this:
 ```
+## KUBERNETES CLUSTER ##
+
+10.10.1.10 kmaster
+10.10.1.11 knode1
+10.10.1.12 knode2
+```
+
+This is the part adding the lines to `/etc/hosts`
+```
 
 [....]
     - name: add Kbernetes line to /etc/hosts
@@ -159,4 +168,16 @@ I tried to add comments in all the files, so won't be into details here.
 - import_playbook: kubernetes_create_cluster.yml
 ```
 
+## Common errors ##
+
+I have some issues making KVM to undertandme and specially to create the VMs in the location I wanted, specially after made a fresh host installation.
+
+One of the most commun errors was startrting the VMs
+
+```
+TASK [start vm] ****************************************************************
+An exception occurred during task execution. To see the full traceback, use -vvv. The error was: libvirt.libvirtError: Cannot access storage file '/home/solifugo/Github/Kubernetes/KVM_Disks/kmaster.qcow2' (as uid:107, gid:107): Permission denied
+```
+
+KVM doesnt like when you try to create VMs in your home directory
 
