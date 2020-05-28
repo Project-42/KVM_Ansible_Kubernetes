@@ -176,8 +176,13 @@ One of the most commun errors was startrting the VMs
 
 ```
 TASK [start vm] ****************************************************************
-An exception occurred during task execution. To see the full traceback, use -vvv. The error was: libvirt.libvirtError: Cannot access storage file '/home/solifugo/Github/Kubernetes/KVM_Disks/kmaster.qcow2' (as uid:107, gid:107): Permission denied
+An exception occurred during task execution. To see the full traceback, use -vvv. The error was: libvirt.libvirtError: Cannot access storage file '/home/P42/Github/Kubernetes/KVM_Disks/kmaster.qcow2' (as uid:107, gid:107): Permission denied
 ```
 
-KVM doesnt like when you try to create VMs in your home directory
-
+The solution is to add your user in the qemu.conf file:
+```
+[root@server libvirt]# grep -i P42 /etc/libvirt/qemu.conf
+user = "P42"
+group = "P42"
+[root@server libvirt]# 
+```

@@ -60,7 +60,7 @@
       file:
         path: "{{ vm_location }}"
         state: directory
-        mode: '1755'
+        mode: '0755'
 
     - name: Get VM disks
     # Check if Disks are already created
